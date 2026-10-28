@@ -1,0 +1,13 @@
+{
+  "name": "luau-sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Luau + Roblox API 에뮬레이터 웹 샌드박스",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

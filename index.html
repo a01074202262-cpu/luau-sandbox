@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luau 샌드박스</title>
+<style>
+  :root {
+    --bg: #14181f;
+    --panel: #1b212b;
+    --line: #2b3441;
+    --text: #dbe3ee;
+    --muted: #8493a8;
+    --accent: #4d9bff;
+    --accent-press: #3a82e0;
+    --ok: #5fd08a;
+    --err: #ff6b6b;
+    --err-bg: #2a1a1d;
+    --warn: #f2c14e;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .spacer { flex: 1; }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text);
+    padding: 8px 14px;
+  }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label.toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; user-select: none; }
+  label.toggle input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  select {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer;
+  }
+  #run {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    padding: 8px 22px;
+  }
+  #run:hover { background: var(--accent-press); border-color: var(--accent-press); }
+  #run:disabled { opacity: .6; cursor: wait; }
+
+  main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  section + section { border-left: 1px solid var(--line); }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    min-height: 38px;
+  }
+  .status { font-weight: 600; }
+  .status.ok { color: var(--ok); }
+  .status.fail { color: var(--err); }
+
+  .editor { flex: 1; display: flex; min-height: 0; }
+  #gutter {
+    padding: 14px 10px 14px 14px;
+    text-align: right;
+    color: #52606f;
+    user-select: none;
+    overflow: hidden;
+    white-space: pre;
+    border-right: 1px solid var(--line);
+  }
+  #code, #gutter, #out {
+    font-family: "JetBrains Mono", "D2Coding", Consolas, "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    tab-size: 4;
+  }
+  #code {
+    flex: 1;
+    resize: none;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    padding: 14px;
+    white-space: pre;
+    overflow: auto;
+  }
+  #out {
+    flex: 1;
+    margin: 0;
+    padding: 14px 16px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .stdout { color: var(--text); }
+  .stderr {
+    color: var(--err);
+    background: var(--err-bg);
+    border-left: 3px solid var(--err);
+    padding: 10px 12px;
+    margin-top: 10px;
+    border-radius: 0 6px 6px 0;
+  }
+  .stderr-title { color: var(--err); font-weight: 700; display: block; margin-bottom: 4px; }
+  .empty { color: var(--muted); }
+  .note { color: var(--warn); }
+
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    section + section { border-left: 0; border-top: 1px solid var(--line); }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Luau 샌드박스</h1>
+  <span class="hint">Ctrl + Enter 로도 실행할 수 있어요</span>
+  <span class="spacer"></span>
+  <select id="examples" aria-label="예제 불러오기">
+    <option value="">예제 불러오기…</option>
+    <option value="parts">Part 만들고 찾기</option>
+    <option value="events">이벤트 / Humanoid</option>
+    <option value="task">task.wait / 루프</option>
+    <option value="tween">TweenService</option>
+    <option value="error">오류 확인용</option>
+    <option value="pure">순수 Luau (Roblox 끔)</option>
+  </select>
+  <label class="toggle" title="끄면 순수 Luau 로만 실행돼요">
+    <input type="checkbox" id="roblox" checked> Roblox API
+  </label>
+  <button id="clear" type="button">출력 지우기</button>
+  <button id="run" type="button">가동</button>
+</header>
+
+<main>
+  <section>
+    <div class="bar"><span>코드 (main.luau)</span></div>
+    <div class="editor">
+      <div id="gutter" aria-hidden="true">1</div>
+      <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off"
+        aria-label="Luau 코드 입력">-- Roblox API 모드: game, workspace, Instance.new, task 등을 쓸 수 있어요
+local part = Instance.new("Part")
+part.Name = "MyPart"
+part.Size = Vector3.new(4, 1, 2)
+part.Position = Vector3.new(0, 10, 0)
+part.Color = Color3.fromRGB(255, 120, 0)
+part.Parent = workspace
+
+print(part:GetFullName(), part.Position)
+
+task.wait(1)
+part.Position += Vector3.new(0, 5, 0)
+print("1초 뒤:", part.Position)
+</textarea>
+    </div>
+  </section>
+
+  <section>
+    <div class="bar">
+      <span>출력</span>
+      <span id="status" class="status"></span>
+    </div>
+    <pre id="out" aria-live="polite"><span class="empty">‘가동’ 버튼을 누르면 결과가 여기에 표시됩니다.</span></pre>
+  </section>
+</main>
+
+<script>
+  const codeEl = document.getElementById("code");
+  const gutter = document.getElementById("gutter");
+  const out = document.getElementById("out");
+  const statusEl = document.getElementById("status");
+  const runBtn = document.getElementById("run");
+
+  // 줄 번호
+  function updateGutter() {
+    const lines = codeEl.value.split("\n").length;
+    let s = "";
+    for (let i = 1; i <= lines; i++) s += i + "\n";
+    gutter.textContent = s;
+    gutter.scrollTop = codeEl.scrollTop;
+  }
+  codeEl.addEventListener("input", updateGutter);
+  codeEl.addEventListener("scroll", () => { gutter.scrollTop = codeEl.scrollTop; });
+  updateGutter();
+
+  // Tab 키로 들여쓰기
+  codeEl.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const s = codeEl.selectionStart, en = codeEl.selectionEnd;
+      codeEl.value = codeEl.value.slice(0, s) + "\t" + codeEl.value.slice(en);
+      codeEl.selectionStart = codeEl.selectionEnd = s + 1;
+      updateGutter();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      run();
+    }
+  });
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = "status " + (cls || "");
+  }
+
+  function render(result) {
+    out.textContent = "";
+
+    if (result.stdout) {
+      const o = document.createElement("span");
+      o.className = "stdout";
+      o.textContent = result.stdout;
+      out.appendChild(o);
+    }
+
+    if (result.stderr) {
+      const box = document.createElement("div");
+      box.className = "stderr";
+      const title = document.createElement("span");
+      title.className = "stderr-title";
+      title.textContent = result.timedOut ? "시간 초과" : result.serverError ? "서버 오류" : "오류 발생";
+      box.appendChild(title);
+      box.appendChild(document.createTextNode(result.stderr));
+      out.appendChild(box);
+    }
+
+    if (!result.stdout && !result.stderr) {
+      const e = document.createElement("span");
+      e.className = "empty";
+      e.textContent = "(출력 없음)";
+      out.appendChild(e);
+    }
+  }
+
+  async function run() {
+    if (runBtn.disabled) return;
+    runBtn.disabled = true;
+    runBtn.textContent = "가동 중…";
+    setStatus("실행 중…");
+
+    try {
+      const res = await fetch("/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: codeEl.value, roblox: document.getElementById("roblox").checked }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        render({ stdout: "", stderr: data.error || "요청에 실패했습니다.", serverError: true });
+        setStatus("실패", "fail");
+      } else {
+        render(data);
+        const t = data.durationMs + "ms";
+        const mode = data.roblox ? "Roblox" : "Luau";
+        if (data.ok) setStatus("성공 · " + mode + " · " + t, "ok");
+        else setStatus("오류 (종료 코드 " + data.exitCode + ") · " + t, "fail");
+      }
+    } catch (err) {
+      render({
+        stdout: "",
+        stderr: "서버에 연결할 수 없습니다. server.js가 실행 중인지 확인하세요.\n" + err.message,
+        serverError: true,
+      });
+      setStatus("연결 실패", "fail");
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = "가동";
+    }
+  }
+
+
+  // ---- 예제 ----
+  const EXAMPLES = {
+    parts: `local folder = Instance.new("Folder")
+folder.Name = "Blocks"
+folder.Parent = workspace
+
+for i = 1, 3 do
+	local p = Instance.new("Part")
+	p.Name = "Block" .. i
+	p.Position = Vector3.new(i * 5, 0, 0)
+	p.Parent = folder
+end
+
+print("자식 수:", #folder:GetChildren())
+print(workspace.Blocks.Block2.Position)
+print(workspace:FindFirstChild("Block3", true):GetFullName())
+print(workspace.Blocks.Block1.Foo) -- 없는 속성: 오류가 나요`,
+    events: `local humanoid = Instance.new("Humanoid", workspace)
+
+humanoid.HealthChanged:Connect(function(h)
+	print("체력:", h)
+end)
+humanoid.Died:Connect(function()
+	print("사망!")
+end)
+
+humanoid:TakeDamage(30)
+humanoid:TakeDamage(80)
+
+local ev = Instance.new("BindableEvent")
+ev.Event:Connect(function(a, b) print("받음:", a, b) end)
+ev:Fire("안녕", 123)`,
+    task: `print("시작")
+task.spawn(function()
+	for i = 1, 3 do
+		task.wait(1)
+		print("스레드 A", i, "초")
+	end
+end)
+
+task.delay(2.5, function()
+	print("2.5초 뒤에 실행")
+end)
+
+game:GetService("RunService").Heartbeat:Connect(function(dt)
+	-- 매 프레임 실행 (가상 시간)
+end)
+
+task.wait(4)
+print("끝")`,
+    tween: `local TweenService = game:GetService("TweenService")
+local part = Instance.new("Part", workspace)
+part.Position = Vector3.new(0, 0, 0)
+
+local tween = TweenService:Create(part, TweenInfo.new(2, Enum.EasingStyle.Linear), {
+	Position = Vector3.new(0, 20, 0),
+	Transparency = 0.5,
+})
+tween.Completed:Connect(function(state)
+	print("트윈 끝:", state, part.Position)
+end)
+tween:Play()`,
+    error: `local part = Instance.new("Part")
+part.Anchored = "yes" -- 타입 오류`,
+    pure: `-- 순수 Luau (오른쪽 위 Roblox API 스위치를 끄고 실행하세요)
+local function fib(n: number): number
+	if n < 2 then return n end
+	return fib(n - 1) + fib(n - 2)
+end
+print(fib(20))`,
+  };
+  document.getElementById("examples").addEventListener("change", (e) => {
+    const key = e.target.value;
+    if (!key) return;
+    codeEl.value = EXAMPLES[key];
+    document.getElementById("roblox").checked = key !== "pure";
+    updateGutter();
+    e.target.value = "";
+  });
+
+  runBtn.addEventListener("click", run);
+  document.getElementById("clear").addEventListener("click", () => {
+    out.innerHTML = '<span class="empty">‘가동’ 버튼을 누르면 결과가 여기에 표시됩니다.</span>';
+    setStatus("");
+  });
+</script>
+</body>
+</html>
